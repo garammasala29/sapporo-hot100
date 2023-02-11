@@ -1,4 +1,4 @@
 Rails.application.routes.draw do
-  root 'users#index'
-  get '/auth/:provider/callback', to: 'users#spotify'
+  root 'playlists#index'
+  get '/auth/:provider/callback', to: 'playlists#spotify'
 end
