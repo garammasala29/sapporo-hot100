@@ -5,5 +5,6 @@ class PlaylistsController < ApplicationController
   def spotify
     spotify_user = RSpotify::User.new(request.env['omniauth.auth'])
     playlist = RSpotify::Playlist.find_by_id(ENV['PLAYLIST_ID'])
+    chart_playlist = Playlist.scrape
   end
 end
