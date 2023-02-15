@@ -9,7 +9,7 @@ class PlaylistsController < ApplicationController
     spotify_playlist.remove_tracks!(positions, snapshot_id: spotify_playlist.snapshot_id)
     # Playlist.scrape
     tracks = Playlist.all.flat_map do |list|
-      RSpotify::Track.search("artist:#{list.artist} track:#{list.track}", limit: 1).flatten
+      RSpotify::Track.search("#{list.artist} #{list.track}", limit: 1, market: 'JP').flatten
     end.compact_blank
     spotify_playlist.add_tracks!(tracks)
   end
