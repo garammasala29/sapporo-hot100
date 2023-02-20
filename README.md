@@ -1,24 +1,5 @@
-# README
+# Sapporo Hot100
 
-This README would normally document whatever steps are necessary to get the
-application up and running.
+[SAPPORO HOT 100 \- 週間楽曲チャート｜82\.5 FM NORTH WAVE ノースウェーブ](https://www.fmnorth.co.jp/hot100/)のランキングをSpotify APIを使ってプレイリスト化しました。
 
-Things you may want to cover:
-
-* Ruby version
-
-* System dependencies
-
-* Configuration
-
-* Database creation
-
-* Database initialization
-
-* How to run the test suite
-
-* Services (job queues, cache servers, search engines, etc.)
-
-* Deployment instructions
-
-* ...
+<img width="981" alt="image" src="https://user-images.githubusercontent.com/69446373/220035413-d0af20c1-906f-482a-802c-24985f1e6efe.png">
