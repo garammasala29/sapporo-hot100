@@ -26,10 +26,10 @@ jobs:
     
     - name: Setup database
       run: |
-        bundle exec rails db:create
-        bundle exec rails db:migrate
+        bundle exec rails db:setup
       env:
-        DATABASE_URL: postgres://postgres:postgres@localhost:5432/test
+        RAILS_ENV: test
+        DATABASE_URL: sqlite3:db/test.sqlite3
     
     - name: Update playlist
       run: bundle exec rails playlist:update
@@ -39,15 +39,5 @@ jobs:
         PLAYLIST_ID: ${{ secrets.SPOTIFY_PLAYLIST_ID }}
         SPOTIFY_REFRESH_TOKEN: ${{ secrets.SPOTIFY_REFRESH_TOKEN }}
         SPOTIFY_USER_ID: ${{ secrets.SPOTIFY_USER_ID }}
-        DATABASE_URL: postgres://postgres:postgres@localhost:5432/test
-    
-    services:
-      postgres:
-        image: postgres:13
-        env:
-          POSTGRES_PASSWORD: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+        RAILS_ENV: test
+        DATABASE_URL: sqlite3:db/test.sqlite3
