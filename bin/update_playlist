@@ -1,0 +1,132 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'mechanize'
+require 'rspotify'
+require 'net/http'
+require 'json'
+require 'base64'
+
+env_file = File.expand_path('../.env', __dir__)
+if File.exist?(env_file)
+  require 'dotenv'
+  Dotenv.load(env_file)
+end
+
+HOT100_URL = 'https://www.fmnorth.co.jp/hot100/'
+MIN_TRACK_COUNT = 50
+REQUEST_TIMEOUT = 15
+MAX_SEARCH_RETRIES = 3
+
+def fetch_env(name)
+  ENV[name] or abort "Error: #{name} environment variable is required."
+end
+
+def squish(text)
+  text.to_s.gsub(/[[:space:]]+/, ' ').strip
+end
+
+def scrape_hot100
+  agent = Mechanize.new
+  agent.open_timeout = REQUEST_TIMEOUT
+  agent.read_timeout = REQUEST_TIMEOUT
+
+  page = agent.get(HOT100_URL)
+
+  entries = []
+  page.search('.hot100List').each do |table|
+    table.search('.hot100List__detail').each do |row|
+      track = row.at('.musicTitle')&.text
+      artist = row.at('.hot100List__detail--artist')&.text
+      next unless track && artist
+
+      entries << { track: squish(track), artist: squish(artist) }
+    end
+  end
+
+  if entries.size < MIN_TRACK_COUNT
+    raise "スクレイピング結果が#{entries.size}件でした(想定: 100件前後、閾値: #{MIN_TRACK_COUNT}件)。" \
+          "#{HOT100_URL} のページ構成が変わった可能性があります。"
+  end
+
+  entries
+end
+
+def refresh_access_token(refresh_token, client_id, client_secret)
+  uri = URI('https://accounts.spotify.com/api/token')
+  http = Net::HTTP.new(uri.host, uri.port)
+  http.use_ssl = true
+  http.open_timeout = REQUEST_TIMEOUT
+  http.read_timeout = REQUEST_TIMEOUT
+
+  request = Net::HTTP::Post.new(uri)
+  request['Authorization'] = "Basic #{Base64.strict_encode64("#{client_id}:#{client_secret}")}"
+  request['Content-Type'] = 'application/x-www-form-urlencoded'
+  request.body = URI.encode_www_form(grant_type: 'refresh_token', refresh_token: refresh_token)
+
+  response = http.request(request)
+  data = JSON.parse(response.body)
+
+  data['access_token'] or
+    raise "Failed to refresh access token: #{data['error_description'] || data['error'] || response.body}"
+end
+
+def search_track(entry)
+  query = "#{entry[:artist]} #{entry[:track]}"
+  attempts = 0
+
+  begin
+    RSpotify::Track.search(query, limit: 1, market: 'JP').first
+  rescue RestClient::TooManyRequests => e
+    attempts += 1
+    raise if attempts > MAX_SEARCH_RETRIES
+
+    wait_seconds = (e.response&.headers&.dig(:retry_after) || attempts).to_i + 1
+    warn "Rate limited by Spotify. Waiting #{wait_seconds}s before retry (#{attempts}/#{MAX_SEARCH_RETRIES})..."
+    sleep wait_seconds
+    retry
+  end
+end
+
+def main
+  client_id = fetch_env('CLIENT_ID')
+  client_secret = fetch_env('CLIENT_SECRET')
+  playlist_id = fetch_env('PLAYLIST_ID')
+  refresh_token = fetch_env('SPOTIFY_REFRESH_TOKEN')
+  user_id = ENV['SPOTIFY_USER_ID'] || 'default_user'
+
+  puts "Starting playlist update at #{Time.now}"
+
+  puts 'Scraping SAPPORO HOT100...'
+  entries = scrape_hot100
+  puts "Scraped #{entries.size} tracks."
+
+  puts 'Refreshing Spotify access token...'
+  access_token = refresh_access_token(refresh_token, client_id, client_secret)
+
+  RSpotify.authenticate(client_id, client_secret)
+  RSpotify::User.new(
+    'credentials' => { 'token' => access_token, 'refresh_token' => refresh_token },
+    'info' => { 'id' => user_id }
+  )
+
+  puts 'Searching tracks on Spotify...'
+  tracks = entries.filter_map { |entry| search_track(entry) }
+  puts "Found #{tracks.size}/#{entries.size} tracks on Spotify."
+
+  if tracks.size < MIN_TRACK_COUNT
+    raise "Spotify上で見つかった曲が#{tracks.size}件しかありません(閾値: #{MIN_TRACK_COUNT}件)。" \
+          '検索処理に問題がある可能性があります。'
+  end
+
+  playlist = RSpotify::Playlist.find_by_id(playlist_id)
+  raise "Playlist not found: #{playlist_id}" unless playlist
+
+  # replace_tracks! is a single atomic PUT request, so the existing playlist
+  # is never left empty/partial if something above this line raises instead.
+  playlist.replace_tracks!(tracks)
+
+  puts "Playlist updated successfully! Replaced with #{tracks.size} tracks."
+end
+
+main
