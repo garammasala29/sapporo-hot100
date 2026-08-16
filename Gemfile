@@ -1,6 +1,6 @@
 source "https://rubygems.org"
 
-ruby "3.1.3"
+ruby "4.0.6"
 
 gem "mechanize"
 gem "rspotify"
